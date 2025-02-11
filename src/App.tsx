@@ -1,63 +1,59 @@
-// src/App.tsx
+// App.tsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { MCPClient, Tool } from './mcpClient.ts';
-
-interface Message {
-  role: string;
-  content: string;
-}
-
-interface MCPConfig {
-  mcpServers: { [key: string]: { name: string; type: string; serverUrl: string } };
-}
+import { McpSSEClient, McpServerConfig } from './mcpSSEClient.ts';
+import ChatComponent from './ChatComponent.tsx';
+import ConfigComponent from './ConfigComponent.tsx';
 
 const App: React.FC = () => {
-  const [config, setConfig] = useState<MCPConfig>({ mcpServers: {"MCPServer": {
-      "name": "MCPServer",
-      "type": "sse",
-      "serverUrl": "http://192.168.0.103:8000/sse"
-    },} });
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<{ role: string, content: string }[]>([]);
   const [input, setInput] = useState<string>('');
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [mcpClient, setMCPClient] = useState<MCPClient | null>(null);
   const [toolMessage, setToolMessage] = useState<string>('');
+  const [tools, setTools] = useState<any[]>([]);
+  const [serverConfigs, setServerConfigs] = useState<McpServerConfig[]>([
+    {"name": "MCPServer", "type": "sse", "serverUrl": "http://localhost:8000/sse"},
+    {"name": "MCPServer2", "type": "sse", "serverUrl": "http://localhost:8001/sse"},
+  ]);
+  const [mcpClient, setMcpClient] = useState<McpSSEClient | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<string>('Disconnected');
+  const [error, setError] = useState<string | undefined>(undefined);
+  const maxToolCalls = 5; // Maximum number of tool calls to prevent infinite loops
 
   useEffect(() => {
-    if (Object.keys(config.mcpServers).length > 0) {
-      const client = new MCPClient(config);
-      client.connectToServers().then(() => {
-        setMCPClient(client);
-        setTools(client.availableTools);
-      });
-    }
-  }, [config]);
+    const client = new McpSSEClient(serverConfigs);
+    client.initializeClients().then((result) => {
+      if (result.success) {
+        setTools(client.getAvailableTools());
+        setMcpClient(client);
+        setConnectionStatus('Connected');
+      } else {
+        setConnectionStatus('Error');
+        setError(result.error);
+      }
+    });
 
-  const handleConfigChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    try {
-      const newConfig = JSON.parse(event.target.value);
-      setConfig(newConfig);
-    } catch (error) {
-      console.error('Invalid JSON:', error);
-    }
-  };
+    return () => {
+      if (mcpClient) {
+        mcpClient.closeAllConnections();
+      }
+    };
+  }, [serverConfigs]);
 
   const handleSendMessage = async () => {
-    if (input.trim() === '') return;
-    let role: string = "user";
-    let newMessages: Message[] = [...messages, { role, content: input }];
-    if (toolMessage !== '') {
-      role = "function";
-      newMessages = [...messages, { role, content: toolMessage }];
-      setToolMessage('');
-    } else {
-      setMessages(newMessages);
-      setInput('');
-    }
+  let newMessages = [...messages];
+  let toolCallCount = 0;
 
-    try {
-      const response = await axios.post('http://localhost:8080/v1/chat/completions', {
+  if (input !== '') {
+    newMessages = [...newMessages, { role: 'user', content: input }];
+    setMessages(newMessages);
+    setInput('');
+  }
+
+  try {
+    while (true) {
+      console.log("NewMessages:")
+      console.log(newMessages)
+      var response = await axios.post('http://localhost:8080/v1/chat/completions', {
         messages: newMessages,
         model: '',
         tools: tools.map(tool => ({
@@ -69,60 +65,120 @@ const App: React.FC = () => {
           },
         })),
       });
-      var debugresponse = JSON.stringify(response);
-      console.log("Response:" + debugresponse)
-      //check finish reason for tool call. 
-      if (response.data.choices[0].finish_reason === 'tool_calls') {
+
+      console.log(response.data.choices[0]);
+      var finishReason = response.data.choices[0].finish_reason;
+
+      if (finishReason === 'tool_calls') {
+        console.log("Processing tool call");
+
         const toolCalls = response.data.choices[0].message.tool_calls;
-        for (const toolCall of toolCalls) {
-          const toolName = toolCall.function.name;
-          const toolInput = toolCall.function.arguments;
-          const toolResponse = await mcpClient?.callTool(toolName, toolInput);
-          const toolMessageContent = {
-            role: "function",
-            content: toolResponse,
+        
+        const calltoolMessageContent = {
+            role: "assistant",
+            "tool_calls":toolCalls,
+            content: '',
           };
-          setToolMessage(toolResponse);
-          setToolMsg(toolMessageContent);
-          handleSendMessage();
-          return;
+        newMessages = [...newMessages, calltoolMessageContent];
+        for (const toolCall of toolCalls) {
+          if (toolCallCount >= maxToolCalls) {
+            console.error("Max tool calls reached. Stopping further tool calls.");
+            setMessages(prevMessages => [...prevMessages, { role: 'assistant', content: 'Max tool calls reached. Stopping further tool calls.' }]);
+            return;
+          }
+
+          const toolParams: CallToolRequest = {
+            name: toolCall.function.name,
+            arguments: JSON.parse(toolCall.function.arguments || '{}'),
+          };
+
+          const toolResponse = await mcpClient?.callTool(toolParams);
+          
+          const toolMessageContent = {
+            tool_call_id: '',
+            role: "tool",
+            name:toolCall.function.name,
+            content: toolResponse?.content[0]?.text || 'Tool failed to execute.',
+          };
+
+          newMessages = [...newMessages, toolMessageContent];
+          finishReason = "";
+          response = "";
+          toolCallCount++;
         }
+      } else if (finishReason === 'stop' || finishReason === 'length') {
+        // Append the assistant's message to the message history
+        const content = response.data.choices[0].message.content;
+        newMessages = [...newMessages, { role: 'assistant', content }];
+        break;
       }
-      const content = response.data.choices[0].message.content;
-      setMessages(prevMessages => [...prevMessages, { role: 'assistant', content }]);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      setMessages(prevMessages => [...prevMessages, { role: 'assistant', content: 'Failed to send message.' }]);
+    }
+
+    setMessages(newMessages);
+  } catch (error) {
+    console.error('Error sending message:', error);
+    setMessages(prevMessages => [...prevMessages, { role: 'assistant', content: 'Failed to send message.' }]);
+    setConnectionStatus('Error');
+    setError(error.message);
+  }
+};
+
+
+  const handleConfigSave = (newConfigs: McpServerConfig[]) => {
+    setServerConfigs(newConfigs);
+    if (mcpClient) {
+      mcpClient.closeAllConnections().then(() => {
+        const newClient = new McpSSEClient(newConfigs);
+        newClient.initializeClients().then((result) => {
+          if (result.success) {
+            setTools(newClient.getAvailableTools());
+            setMcpClient(newClient);
+            setConnectionStatus('Connected');
+          } else {
+            setConnectionStatus('Error');
+            setError(result.error);
+          }
+        });
+      });
+    }
+  };
+
+  const deleteServerConfig = (index: number) => {
+    const newConfigs = serverConfigs.filter((_, i) => i !== index);
+    setServerConfigs(newConfigs);
+    if (mcpClient) {
+      mcpClient.closeAllConnections().then(() => {
+        const newClient = new McpSSEClient(newConfigs);
+        newClient.initializeClients().then((result) => {
+          if (result.success) {
+            setTools(newClient.getAvailableTools());
+            setMcpClient(newClient);
+            setConnectionStatus('Connected');
+          } else {
+            setConnectionStatus('Error');
+            setError(result.error);
+          }
+        });
+      });
     }
   };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-    <h1>MCP Chat App</h1>
-      <h2>Available Tools</h2>
-      <ul>
-        {tools.map(tool => (
-          <li key={tool.name}>
-            <strong>{tool.name}</strong>: {tool.description} 
-          </li>
-        ))}
-      </ul>
-      <h2>Chat</h2>
-      <div style={{ marginBottom: '20px' }}>
-        {messages.map((msg, index) => (
-          <div key={index}>
-            <strong>{msg.role === 'user' ? 'You' : 'Assistant'}:</strong> {msg.content}
-          </div>
-        ))}
-      </div>
-      <input
-        type="text"
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        placeholder="Type your message here"
-        style={{ width: '80%', marginRight: '10px' }}
+    <div>
+      <h1>MCP Chat Interface</h1>
+      <p>Connection Status: {connectionStatus}</p>
+      {error && <p style={{ color: 'red' }}>Error: {error}</p>}
+      <ConfigComponent 
+        serverConfigs={serverConfigs} 
+        onConfigSave={handleConfigSave} 
+        onDeleteServer={deleteServerConfig} 
       />
-      <button onClick={handleSendMessage}>Send</button>
+      <ChatComponent 
+        messages={messages} 
+        input={input} 
+        setInput={setInput} 
+        onSendMessage={handleSendMessage} 
+      />
     </div>
   );
 };
