@@ -314,3 +314,20 @@ describe('App', () => {
     });
   });
 });
+
+// Mock axios post to simulate server responses
+jest.mock('axios', () => ({
+  post: jest.fn().mockResolvedValue({
+    data: {
+      choices: [
+        {
+          message: {
+            role: 'assistant',
+            content: 'Assistant response here',
+            finish_reason: 'stop',
+          },
+        },
+      ],
+    },
+  }),
+}));
