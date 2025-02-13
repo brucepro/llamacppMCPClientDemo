@@ -42,17 +42,18 @@ const ConfigComponent: React.FC<ConfigComponentProps> = ({ serverConfigs, onConf
   };
 
   const handleResourceSelect = (resourceUri: string, resourceDescription?: string) => {
-    setSelectedResources(prevSelected => {
-      const newSelected = [...prevSelected];
-      const index = newSelected.findIndex(resource => resource.uri === resourceUri);
-      if (index > -1) {
-        newSelected.splice(index, 1);
-      } else {
-        newSelected.push({ uri: resourceUri, description: resourceDescription });
-      }
-      return newSelected;
-    });
-  };
+  setSelectedResources(prevSelected => {
+    const resource = { uri: resourceUri, description: resourceDescription };
+    const index = prevSelected.findIndex((res: { uri: string }) => res.uri === resourceUri);
+    if (index > -1) {
+      prevSelected.splice(index, 1);
+    } else {
+      prevSelected.push(resource);
+    }
+    return [...prevSelected]; // Ensure state update triggers re-render
+  });
+};
+
 
   const handleToolArgumentChange = (toolName: string, argument: string, value: string) => {
     setToolArguments(prevArgs => ({
@@ -138,10 +139,10 @@ const ConfigComponent: React.FC<ConfigComponentProps> = ({ serverConfigs, onConf
             {serverResources.map((resource: any, index: number) => (
               <li key={index}>
                 <input 
-                  type="checkbox" 
-                  checked={selectedResources.includes(resource.uri)} 
-                  onChange={() => handleResourceSelect(resource.uri)} 
-                />
+                    type="checkbox" 
+                    checked={selectedResources.some((res: { uri: string }) => res.uri === resource.uri)} 
+                    onChange={() => handleResourceSelect(resource.uri, resource.description)} 
+                  />
                 {resource.name} ({resource.uri}): {resource.description}
               </li>
             ))}
