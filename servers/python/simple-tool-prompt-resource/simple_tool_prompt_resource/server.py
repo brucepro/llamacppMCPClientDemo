@@ -11,6 +11,10 @@ from starlette.routing import Mount, Route
 from starlette.middleware.cors import CORSMiddleware
 from pydantic import AnyUrl
 import uvicorn
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin
+from typing import List, Union
+from dataclasses import dataclass
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -55,9 +59,29 @@ def create_messages(
     return messages
 
 
-async def fetch_website(url: str) -> list[types.TextContent | types.ImageContent | types.EmbeddedResource]:
+
+
+# Define data classes for content types
+@dataclass
+class TextContent:
+    type: str = "text"
+    text: str = ""
+
+@dataclass
+class ImageContent:
+    type: str = "image"
+    url: str = ""
+    data: bytes = b""
+
+@dataclass
+class EmbeddedResource:
+    type: str = "embedded"
+    url: str = ""
+    data: bytes = b""
+
+async def fetch_website(url: str) -> List[Union[TextContent, ImageContent, EmbeddedResource]]:
     """
-    Fetches a website and returns its content.
+    Fetches a website and returns its content, including text, images, and embedded resources.
 
     Args:
     - url (str): The URL of the website to fetch.
@@ -72,10 +96,18 @@ async def fetch_website(url: str) -> list[types.TextContent | types.ImageContent
         try:
             response = await client.get(url)
             response.raise_for_status()
-            return [types.TextContent(type="text", text=response.text)]
+            soup = BeautifulSoup(response.text, 'html.parser')
+
+            content = []
+            # Extract text content
+            text = soup.get_text()
+            content.append(TextContent(text=text))
+
+            return str(content)
         except httpx.HTTPError as e:
-            logger.error(f"Failed to fetch website: {e}")
+            print(f"Failed to fetch website: {e}")
             return []
+
 
 @click.command()
 @click.option("--port", default=8000, help="Port to listen on for SSE")

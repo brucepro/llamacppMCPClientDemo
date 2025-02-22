@@ -18,7 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
 ]
-dependencies = ["anyio>=4.5", "click>=8.1.0", "httpx>=0.27", "mcp"]
+dependencies = ["anyio>=4.5", "click>=8.1.0", "httpx>=0.27", "mcp", "beautifulsoup4"]
 
 [project.scripts]
 mcp-simple-tool-prompt-resource = "simple_tool_prompt_resource.server:main"

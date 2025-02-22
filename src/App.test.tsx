@@ -1,6 +1,7 @@
 // App.test.tsx
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import '@testing-library/jest-dom'; // Import jest-dom matchers
 import App from './App';
 import { McpSSEClient, McpServerConfig } from './mcpSSEClient';
 import ChatComponent from './ChatComponent';
@@ -82,7 +83,12 @@ jest.mock('./ChatComponent', () => {
           <div key={index}>{msg.role}: {msg.content}</div>
         ))}
       </div>
-      <input type="text" value={input} onChange={(e: any) => setInput(e.target.value)} />
+      <input
+        type="text"
+        value={input}
+        onChange={(e: any) => setInput(e.target.value)}
+        onKeyPress={(e: any) => e.key === 'Enter' && onSendMessage()}
+      />
       <button onClick={onSendMessage}>Send</button>
     </div>
   );
@@ -90,20 +96,22 @@ jest.mock('./ChatComponent', () => {
 });
 
 jest.mock('./ConfigComponent', () => {
-  const ConfigComponentMock = ({ serverConfigs, onConfigSave, onDeleteServer, availableTools, availablePrompts, availableResources, onToolCall, onPromptRun, updateAdditionalContext }: any) => (
-    <div>
-      <h2>Configure MCP Servers</h2>
-      {serverConfigs.map((config: any, index: number) => (
-        <div key={index}>
-          <h3>{config.name}</h3>
-          <button onClick={() => onToolCall({ name: "sample-tool", arguments: {} })}>Call Tool</button>
-          <button onClick={() => onPromptRun({ name: "sample-prompt", arguments: {} })}>Run Prompt</button>
-          <button onClick={() => onDeleteServer(index)}>Delete</button>
-        </div>
-      ))}
-      <button onClick={() => onConfigSave(serverConfigs)}>Save Config</button>
-    </div>
-  );
+  const ConfigComponentMock = ({ serverConfigs, onConfigSave, onDeleteServer, availableTools, availablePrompts, availableResources, onToolCall, onPromptRun, updateAdditionalContext }: any) => {
+    return (
+      <div>
+        <h2>Configure MCP Servers</h2>
+        {serverConfigs.map((config: any, index: number) => (
+          <div key={index}>
+            <h3>{config.name}</h3>
+            <button onClick={() => onToolCall({ name: "sample-tool", arguments: {} })}>Call Tool</button>
+            <button onClick={() => onPromptRun({ name: "sample-prompt", arguments: {} })}>Run Prompt</button>
+            <button onClick={() => onDeleteServer(index)}>Delete</button>
+          </div>
+        ))}
+        <button onClick={() => onConfigSave(serverConfigs)}>Save Config</button>
+      </div>
+    );
+  };
   return ConfigComponentMock;
 });
 
@@ -159,6 +167,11 @@ describe('App', () => {
     ));
 
     render(<App />);
+    ChatComponent.mockImplementation((props: any) => {
+      props.onSendMessage = handleSendMessageMock;
+      return <ChatComponent {...props} />;
+    });
+
     const sendButton = screen.getByText(/Send/i);
     fireEvent.click(sendButton);
 
@@ -176,6 +189,11 @@ describe('App', () => {
     ));
 
     render(<App />);
+    ChatComponent.mockImplementation((props: any) => {
+      props.onSendMessage = handleSendMessageMock;
+      return <ChatComponent {...props} />;
+    });
+
     const inputElement = screen.getByRole('textbox');
     fireEvent.change(inputElement, { target: { value: 'Hello Claude!' } });
     fireEvent.keyPress(inputElement, { key: 'Enter', code: 'Enter' });
@@ -194,6 +212,11 @@ describe('App', () => {
     ));
 
     render(<App />);
+    ConfigComponent.mockImplementation((props: any) => {
+      props.onToolCall = handleToolCallMock;
+      return <ConfigComponent {...props} />;
+    });
+
     const callToolButton = screen.getByText(/Call Tool/i);
     fireEvent.click(callToolButton);
 
@@ -211,6 +234,11 @@ describe('App', () => {
     ));
 
     render(<App />);
+    ConfigComponent.mockImplementation((props: any) => {
+      props.onPromptRun = handlePromptRunMock;
+      return <ConfigComponent {...props} />;
+    });
+
     const runPromptButton = screen.getByText(/Run Prompt/i);
     fireEvent.click(runPromptButton);
 
@@ -228,6 +256,11 @@ describe('App', () => {
     ));
 
     render(<App />);
+    ConfigComponent.mockImplementation((props: any) => {
+      props.onConfigSave = handleConfigSaveMock;
+      return <ConfigComponent {...props} />;
+    });
+
     const saveConfigButton = screen.getByText(/Save Config/i);
     fireEvent.click(saveConfigButton);
 
@@ -245,6 +278,11 @@ describe('App', () => {
     ));
 
     render(<App />);
+    ConfigComponent.mockImplementation((props: any) => {
+      props.onDeleteServer = deleteServerConfigMock;
+      return <ConfigComponent {...props} />;
+    });
+
     const deleteButton = screen.getByText(/Delete/i);
     fireEvent.click(deleteButton);
 
@@ -265,6 +303,11 @@ describe('App', () => {
     McpSSEClientMock.prototype.callTool = handleToolCallMock;
 
     render(<App />);
+    ConfigComponent.mockImplementation((props: any) => {
+      props.onToolCall = handleToolCallMock;
+      return <ConfigComponent {...props} />;
+    });
+
     const inputElement = screen.getByRole('textbox');
     fireEvent.change(inputElement, { target: { value: 'Call the sample tool.' } });
     const sendButton = screen.getByText(/Send/i);
@@ -287,6 +330,11 @@ describe('App', () => {
     McpSSEClientMock.prototype.getPrompt = handlePromptRunMock;
 
     render(<App />);
+    ConfigComponent.mockImplementation((props: any) => {
+      props.onPromptRun = handlePromptRunMock;
+      return <ConfigComponent {...props} />;
+    });
+
     const inputElement = screen.getByRole('textbox');
     fireEvent.change(inputElement, { target: { value: 'Run the sample prompt.' } });
     const sendButton = screen.getByText(/Send/i);
@@ -306,6 +354,11 @@ describe('App', () => {
     ));
 
     render(<App />);
+    ConfigComponent.mockImplementation((props: any) => {
+      props.updateAdditionalContext = updateAdditionalContextMock;
+      return <ConfigComponent {...props} />;
+    });
+
     const updateContextButton = screen.getByText(/Update Context/i);
     fireEvent.click(updateContextButton);
 
@@ -314,20 +367,3 @@ describe('App', () => {
     });
   });
 });
-
-// Mock axios post to simulate server responses
-jest.mock('axios', () => ({
-  post: jest.fn().mockResolvedValue({
-    data: {
-      choices: [
-        {
-          message: {
-            role: 'assistant',
-            content: 'Assistant response here',
-            finish_reason: 'stop',
-          },
-        },
-      ],
-    },
-  }),
-}));
