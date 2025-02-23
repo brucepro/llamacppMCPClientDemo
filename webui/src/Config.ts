@@ -39,6 +39,7 @@ export const CONFIG_DEFAULT = {
   custom: '', // custom json-stringified object
   // experimental features
   pyIntepreterEnabled: false,
+  mcpEnabled: false,
 };
 export const CONFIG_INFO: Record<string, string> = {
   apiKey: 'Set the API Key if you are using --api-key option for the server.',
@@ -79,6 +80,7 @@ export const CONFIG_INFO: Record<string, string> = {
     'DRY sampling reduces repetition in generated text even across long contexts. This parameter sets DRY penalty for the last n tokens.',
   max_tokens: 'The maximum number of token per output.',
   custom: '', // custom json-stringified object
+  mcpEnabled: 'Enable additional features from MCP SSE servers.',
 };
 // config keys having numeric value (i.e. temperature, top_k, top_p, etc)
 export const CONFIG_NUMERIC_KEYS = Object.entries(CONFIG_DEFAULT)

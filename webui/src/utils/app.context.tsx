@@ -15,6 +15,7 @@ import {
 } from './misc';
 import { BASE_URL, CONFIG_DEFAULT, isDev } from '../Config';
 import { matchPath, useLocation, useNavigate } from 'react-router';
+import { McpSSEClient, McpServerConfig } from '../mcp/mcpSSEClient.ts';
 
 interface AppContextValue {
   // conversations and messages
@@ -46,7 +47,35 @@ interface AppContextValue {
   saveConfig: (config: typeof CONFIG_DEFAULT) => void;
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
+  // MCP Server Configs
+  serverConfigs: McpServerConfig[];
+  setServerConfigs: (configs: McpServerConfig[]) => void;
+
+  // MCP Client
+  mcpClient: McpSSEClient | null;
+  setMcpClient: (client: McpSSEClient | null) => void;
+
+  // Tools, Prompts, Resources
+  tools: any[];
+  setTools: (tools: any[]) => void;
+  prompts: any[];
+  setPrompts: (prompts: any[]) => void;
+  resources: any[];
+  setResources: (resources: any[]) => void;
+
+  // Connection Status and Error
+  connectionStatus: string;
+  setConnectionStatus: (status: string) => void;
+  error: string | undefined;
+  setError: (error: string | undefined) => void;
+
+  // Additional Context
+  additionalContext: { uri: string, description?: string }[];
+  setAdditionalContext: (context: { uri: string, description?: string }[]) => void;
 }
+
+
+
 
 // this callback is used for scrolling to the bottom of the chat and switching to the last node
 export type CallbackGeneratedChunk = (currLeafNodeId?: Message['id']) => void;
@@ -84,6 +113,24 @@ export const AppContextProvider = ({
   const [config, setConfig] = useState(StorageUtils.getConfig());
   const [canvasData, setCanvasData] = useState<CanvasData | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  // MCP Server Configs
+  const [serverConfigs, setServerConfigs] = useState<McpServerConfig[]>([]);
+
+  // MCP Client
+  const [mcpClient, setMcpClient] = useState<McpSSEClient | null>(null);
+
+  // Tools, Prompts, Resources
+  const [tools, setTools] = useState<any[]>([]);
+  const [prompts, setPrompts] = useState<any[]>([]);
+  const [resources, setResources] = useState<any[]>([]);
+
+  // Connection Status and Error
+  const [connectionStatus, setConnectionStatus] = useState<string>('Disconnected');
+  const [error, setError] = useState<string | undefined>(undefined);
+
+  // Additional Context
+  const [additionalContext, setAdditionalContext] = useState<{ uri: string, description?: string }[]>([]);
 
   // handle change when the convId from URL is changed
   useEffect(() => {
@@ -125,11 +172,46 @@ export const AppContextProvider = ({
     }
   };
 
+  // Initialize MCP Client if enabled
+  useEffect(() => {
+      if (config.mcpEnabled) {
+        const client = new McpSSEClient(serverConfigs);
+        client.initializeClients().then((result) => {
+          if (result.success) {
+            setTools(client.getAvailableTools());
+            setPrompts(client.getAvailablePrompts());
+            setResources(client.getAvailableResources());
+            setMcpClient(client);
+            setConnectionStatus('Connected');
+          } else {
+            setConnectionStatus('Error');
+            setError(result.error);
+          }
+        });
+        return () => {
+          if (mcpClient) {
+            mcpClient.closeAllConnections();
+          }
+        };
+      } else {
+      // If MCP is not enabled, ensure the client is closed and reset state
+      if (mcpClient) {
+        mcpClient.closeAllConnections();
+        setMcpClient(null);
+        setTools([]);
+        setPrompts([]);
+        setResources([]);
+        setConnectionStatus('Disconnected');
+        setError(undefined);
+      }
+    }
+    }, [config.mcpEnabled, serverConfigs]);
+
   ////////////////////////////////////////////////////////////////////////
   // public functions
 
   const isGenerating = (convId: string) => !!pendingMessages[convId];
-
+  
   const generateMessage = async (
     convId: string,
     leafNodeId: Message['id'],
@@ -182,7 +264,7 @@ export const AppContextProvider = ({
       if (isDev) console.log({ messages });
 
       // prepare params
-      const params = {
+      let params = {
         messages,
         stream: true,
         cache_prompt: true,
@@ -208,6 +290,19 @@ export const AppContextProvider = ({
         timings_per_token: !!config.showTokensPerSecond,
         ...(config.custom.length ? JSON.parse(config.custom) : {}),
       };
+      
+      // If MCP is enabled, add tools to the params and turn off streaming
+      if (config.mcpEnabled && mcpClient) {
+        params.tools = tools.map(tool => ({
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema,
+          },
+        }));
+        params.stream = false; // turn off streaming for tool use
+      }
 
       // send request
       const fetchResponse = await fetch(`${BASE_URL}/v1/chat/completions`, {
@@ -252,6 +347,15 @@ export const AppContextProvider = ({
         setPending(convId, pendingMsg);
         onChunk(); // don't need to switch node for pending message
       }
+    // Handle tool calls
+    if (config.mcpEnabled && mcpClient) {
+      //run tool call loop
+      var finishReason = fetchResponse.data.choices[0].finish_reason;
+      console.log(finishReason);
+      //this is where we will iterate through the tool calls for each tool, then set the current message with 
+      // role of function and send it back to the endpoint. 
+    }
+
     } catch (err) {
       setPending(convId, null);
       if ((err as Error).name === 'AbortError') {

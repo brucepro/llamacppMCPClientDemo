@@ -254,6 +254,11 @@ const SETTING_SECTIONS: SettingSection[] = [
         ),
         key: 'pyIntepreterEnabled',
       },
+      {
+        type: SettingInputType.CHECKBOX,
+        label: 'Enable MCP Client Features',
+        key: 'mcpEnabled',
+    },
     ],
   },
 ];

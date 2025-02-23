@@ -6,7 +6,9 @@ import { classNames, throttle } from '../utils/misc';
 import CanvasPyInterpreter from './CanvasPyInterpreter';
 import StorageUtils from '../utils/storage';
 import { useVSCodeContext } from '../utils/llama-vscode';
-
+import { BeakerIcon } from '@heroicons/react/24/outline';
+import McpConfigDialog from './McpConfigDialog';
+  
 /**
  * A message display is a message node with additional information for rendering.
  * For example, siblings of the message node are stored as their last node (aka leaf node).
@@ -80,6 +82,8 @@ export default function ChatScreen() {
     pendingMessages,
     canvasData,
     replaceMessageAndGenerate,
+    setServerConfigs,
+    serverConfigs,
   } = useAppContext();
   const [inputMsg, setInputMsg] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -93,6 +97,8 @@ export default function ChatScreen() {
 
   // keep track of leaf node for rendering
   const [currNodeId, setCurrNodeId] = useState<number>(-1);
+  const [showMcpSettings, setShowMcpSettings] = useState(false);
+
   const messages: MessageDisplay[] = useMemo(() => {
     if (!viewingChat) return [];
     else return getListMessageDisplay(viewingChat.messages, currNodeId);
@@ -171,7 +177,8 @@ export default function ChatScreen() {
   };
 
   const hasCanvas = !!canvasData;
-
+  const config = StorageUtils.getConfig();
+  
   // due to some timing issues of StorageUtils.appendMsg(), we need to make sure the pendingMsg is not duplicated upon rendering (i.e. appears once in the saved conversation and once in the pendingMsg)
   const pendingMsgDisplay: MessageDisplay[] =
     pendingMsg && messages.at(-1)?.msg.id !== pendingMsg.id
@@ -252,6 +259,12 @@ export default function ChatScreen() {
             >
               Send
             </button>
+            )}
+          {/* MCP Toolbox */}
+          {config.mcpEnabled && (
+            <button className="btn btn-sm bg-base-100 ml-2" onClick={() => setShowMcpSettings(true)}>
+              <BeakerIcon className="h-6 w-6" /> MCP Toolbox
+            </button>
           )}
         </div>
       </div>
@@ -260,6 +273,13 @@ export default function ChatScreen() {
           <CanvasPyInterpreter />
         )}
       </div>
+      {/* Render MCP Config Dialog conditionally */}
+      <McpConfigDialog
+        show={showMcpSettings}
+        onClose={() => setShowMcpSettings(false)}
+      />
     </div>
+
+
   );
 }

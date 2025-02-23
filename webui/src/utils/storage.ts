@@ -203,7 +203,17 @@ const StorageUtils = {
       localStorage.setItem('theme', theme);
     }
   },
+  // manage MCP Server Configs
+    // manage MCP Server Configs
+  getServerConfigs(): McpServerConfig[] {
+    const savedVal = JSON.parse(localStorage.getItem('mcpServerConfigs') || '[]');
+    return savedVal;
+  },
+  setServerConfigs(configs: McpServerConfig[]) {
+    localStorage.setItem('mcpServerConfigs', JSON.stringify(configs));
+  },
 };
+
 
 export default StorageUtils;
 
