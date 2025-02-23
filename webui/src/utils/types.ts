@@ -39,7 +39,7 @@ export interface Message {
   convId: string;
   type: 'text' | 'root';
   timestamp: number; // timestamp from Date.now()
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'function';
   content: string;
   timings?: TimingReport;
   extra?: MessageExtra[];

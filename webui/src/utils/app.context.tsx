@@ -16,7 +16,8 @@ import {
 import { BASE_URL, CONFIG_DEFAULT, isDev } from '../Config';
 import { matchPath, useLocation, useNavigate } from 'react-router';
 import { McpSSEClient, McpServerConfig } from '../mcp/mcpSSEClient.ts';
-import { CallToolRequest } from "@modelcontextprotocol/sdk/types.js"; 
+ 
+
 
 interface AppContextValue {
   // conversations and messages
@@ -372,10 +373,10 @@ export const AppContextProvider = ({
               return;
             }
 
-            const toolParams: CallToolRequest = {
-              name: toolCall.function.name,
-              arguments: JSON.parse(toolCall.function.arguments || '{}'),
-            };
+            const toolParams = {
+                name: toolCall.function.name,
+                arguments: JSON.parse(toolCall.function.arguments || '{}'),
+              };
 
             const toolResponse = await mcpClient?.callTool(toolParams);
             console.log(toolResponse);

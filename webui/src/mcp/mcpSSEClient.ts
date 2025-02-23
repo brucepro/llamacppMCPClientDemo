@@ -1,13 +1,14 @@
 // mcpSSEClient.ts
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { CallToolRequest, CallToolResultSchema, GetPromptRequest } from "@modelcontextprotocol/sdk/types.js"; 
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+
 
 export interface McpServerConfig {
   name: string;
   type: string;
   serverUrl: string;
 }
+
 
 interface McpClientDict {
   [serverName: string]: {
@@ -17,6 +18,7 @@ interface McpClientDict {
     resources: any[];
   };
 }
+
 
 export class McpSSEClient {
   private _clients: McpClientDict = {};
@@ -112,11 +114,11 @@ export class McpSSEClient {
     return resources;
   }
 
-  async callTool(args: CallToolRequest): Promise<typeof CallToolResultSchema | undefined> {
+  async callTool(args: any): Promise<any> {
     console.log(args);
-    const serverName = this._toolServerMap[args.params.name];
+    const serverName = this._toolServerMap[args.name];
     if (!serverName) {
-      console.error(`Tool ${args.params.name} not found.`);
+      console.error(`Tool ${args.name} not found.`);
       return undefined;
     }
     const clientInfo = this._clients[serverName];
@@ -125,20 +127,20 @@ export class McpSSEClient {
       return undefined;
     }
 
-    const tool = clientInfo.tools.find(tool => tool.name === args.params.name);
+    const tool = clientInfo.tools.find(tool => tool.name === args.name);
     if (!tool) {
-      console.error(`Tool ${args.params.name} not found on server ${serverName}.`);
+      console.error(`Tool ${args.name} not found on server ${serverName}.`);
       return undefined;
     }
     try { 
-      return await clientInfo.client.callTool(args, CallToolResultSchema);
+      return await clientInfo.client.callTool(args);
     } catch (error) {
-      console.error(`Error calling tool ${args.params.name} on server ${serverName}:`, error);
+      console.error(`Error calling tool ${args.name} on server ${serverName}:`, error);
       return undefined;
     }
   }
 
-  async getPrompt(params: GetPromptRequest["params"]): Promise<any> {
+   async getPrompt(params: any): Promise<any> {
     const serverName = this._promptServerMap[params.name];
     if (!serverName) {
       console.error(`Prompt ${params.name} not found.`);
@@ -162,7 +164,7 @@ export class McpSSEClient {
     }
   }
 
-  async readResource(params: any): Promise<any> {
+ async readResource(params: any): Promise<any> {
     const serverName = this._resourceServerMap[params.name];
     if (!serverName) {
       console.error(`Resource ${params.name} not found.`);
