@@ -1,9 +1,9 @@
 // mcpSSEClient.ts
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { ListToolsResultSchema, CallToolRequest, CallToolResultSchema, ListPromptsResultSchema, ListResourcesResultSchema, GetPromptRequest } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequest, CallToolResultSchema, GetPromptRequest } from "@modelcontextprotocol/sdk/types.js"; 
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
-interface McpServerConfig {
+export interface McpServerConfig {
   name: string;
   type: string;
   serverUrl: string;
@@ -48,7 +48,7 @@ export class McpSSEClient {
       );
       transport.onerror = (error) => {
         console.error('SSE transport error:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: (error as Error).message };
       };
 
       transport.onclose = () => {
@@ -88,7 +88,7 @@ export class McpSSEClient {
         console.log(`Initialized client for server ${config.name} successfully.`);
       } catch (error) {
         console.error(`Failed to initialize client for server ${config.name}:`, error);
-        return { success: false, error: error.message };
+        return { success: false, error: (error as Error).message };
       }
     }
     return { success: true };
@@ -112,11 +112,11 @@ export class McpSSEClient {
     return resources;
   }
 
-  async callTool(params: CallToolRequest): Promise<CallToolResultSchema | undefined> {
-    console.log(params);
-    const serverName = this._toolServerMap[params.name];
+  async callTool(args: CallToolRequest): Promise<typeof CallToolResultSchema | undefined> {
+    console.log(args);
+    const serverName = this._toolServerMap[args.params.name];
     if (!serverName) {
-      console.error(`Tool ${params.name} not found.`);
+      console.error(`Tool ${args.params.name} not found.`);
       return undefined;
     }
     const clientInfo = this._clients[serverName];
@@ -125,15 +125,15 @@ export class McpSSEClient {
       return undefined;
     }
 
-    const tool = clientInfo.tools.find(tool => tool.name === params.name);
+    const tool = clientInfo.tools.find(tool => tool.name === args.params.name);
     if (!tool) {
-      console.error(`Tool ${params.name} not found on server ${serverName}.`);
+      console.error(`Tool ${args.params.name} not found on server ${serverName}.`);
       return undefined;
     }
     try { 
-      return await clientInfo.client.callTool(params, CallToolResultSchema);
+      return await clientInfo.client.callTool(args, CallToolResultSchema);
     } catch (error) {
-      console.error(`Error calling tool ${params.name} on server ${serverName}:`, error);
+      console.error(`Error calling tool ${args.params.name} on server ${serverName}:`, error);
       return undefined;
     }
   }

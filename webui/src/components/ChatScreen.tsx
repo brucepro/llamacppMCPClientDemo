@@ -82,8 +82,6 @@ export default function ChatScreen() {
     pendingMessages,
     canvasData,
     replaceMessageAndGenerate,
-    setServerConfigs,
-    serverConfigs,
   } = useAppContext();
   const [inputMsg, setInputMsg] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);

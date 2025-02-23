@@ -16,6 +16,7 @@ import {
 import { BASE_URL, CONFIG_DEFAULT, isDev } from '../Config';
 import { matchPath, useLocation, useNavigate } from 'react-router';
 import { McpSSEClient, McpServerConfig } from '../mcp/mcpSSEClient.ts';
+import { CallToolRequest } from "@modelcontextprotocol/sdk/types.js"; 
 
 interface AppContextValue {
   // conversations and messages
@@ -218,7 +219,7 @@ export const AppContextProvider = ({
     onChunk: CallbackGeneratedChunk
   ) => {
     if (isGenerating(convId)) return;
-
+    let toolCallCount = 0;
     const config = StorageUtils.getConfig();
     const currConversation = await StorageUtils.getOneConversation(convId);
     if (!currConversation) {
@@ -316,45 +317,73 @@ export const AppContextProvider = ({
         body: JSON.stringify(params),
         signal: abortController.signal,
       });
-      if (fetchResponse.status !== 200) {
-        const body = await fetchResponse.json();
-        throw new Error(body?.error?.message || 'Unknown error');
+
+      if (!config.mcpEnabled) {
+        if (fetchResponse.status !== 200) {
+          const body = await fetchResponse.json();
+          throw new Error(body?.error?.message || 'Unknown error');
+        }
+        const chunks = getSSEStreamAsync(fetchResponse);
+        for await (const chunk of chunks) {
+          // const stop = chunk.stop;
+          if (chunk.error) {
+            throw new Error(chunk.error?.message || 'Unknown error');
+          }
+          const addedContent = chunk.choices[0].delta.content;
+          const lastContent = pendingMsg.content || '';
+          if (addedContent) {
+            pendingMsg = {
+              ...pendingMsg,
+              content: lastContent + addedContent,
+            };
+          }
+          const timings = chunk.timings;
+          if (timings && config.showTokensPerSecond) {
+            // only extract what's really needed, to save some space
+            pendingMsg.timings = {
+              prompt_n: timings.prompt_n,
+              prompt_ms: timings.prompt_ms,
+              predicted_n: timings.predicted_n,
+              predicted_ms: timings.predicted_ms,
+            };
+          }
+          setPending(convId, pendingMsg);
+          onChunk(); // don't need to switch node for pending message
+        }
+      } else {
+        // Handle tool calls
+          const body = await fetchResponse.json();
+          const finishReason = body.choices[0].finish_reason;
+          console.log(finishReason);
+          if (finishReason === 'tool_calls') {
+          console.log("Processing tool call");
+
+          const toolCalls = body.choices[0].message.tool_calls;
+          
+          const calltoolMessageContent = {
+              role: "assistant",
+              "tool_calls": toolCalls,
+              content: '',
+            };
+          console.log(calltoolMessageContent);
+          for (const toolCall of toolCalls) {
+            if (toolCallCount >= 5) {
+              console.error("Max tool calls reached. Stopping further tool calls.");
+              return;
+            }
+
+            const toolParams: CallToolRequest = {
+              name: toolCall.function.name,
+              arguments: JSON.parse(toolCall.function.arguments || '{}'),
+            };
+
+            const toolResponse = await mcpClient?.callTool(toolParams);
+            console.log(toolResponse);
+            toolCallCount++;
+          // Here you will iterate through the tool calls for each tool, then set the current message with role of function and send it back to the endpoint.
+        }
       }
-      const chunks = getSSEStreamAsync(fetchResponse);
-      for await (const chunk of chunks) {
-        // const stop = chunk.stop;
-        if (chunk.error) {
-          throw new Error(chunk.error?.message || 'Unknown error');
-        }
-        const addedContent = chunk.choices[0].delta.content;
-        const lastContent = pendingMsg.content || '';
-        if (addedContent) {
-          pendingMsg = {
-            ...pendingMsg,
-            content: lastContent + addedContent,
-          };
-        }
-        const timings = chunk.timings;
-        if (timings && config.showTokensPerSecond) {
-          // only extract what's really needed, to save some space
-          pendingMsg.timings = {
-            prompt_n: timings.prompt_n,
-            prompt_ms: timings.prompt_ms,
-            predicted_n: timings.predicted_n,
-            predicted_ms: timings.predicted_ms,
-          };
-        }
-        setPending(convId, pendingMsg);
-        onChunk(); // don't need to switch node for pending message
-      }
-    // Handle tool calls
-    if (config.mcpEnabled && mcpClient) {
-      //run tool call loop
-      var finishReason = fetchResponse.data.choices[0].finish_reason;
-      console.log(finishReason);
-      //this is where we will iterate through the tool calls for each tool, then set the current message with 
-      // role of function and send it back to the endpoint. 
-    }
+     }
 
     } catch (err) {
       setPending(convId, null);
@@ -481,6 +510,22 @@ export const AppContextProvider = ({
         saveConfig,
         showSettings,
         setShowSettings,
+        serverConfigs,
+        setServerConfigs,
+        mcpClient,
+        setMcpClient,
+        tools,
+        setTools,
+        prompts,
+        setPrompts,
+        resources,
+        setResources,
+        connectionStatus,
+        setConnectionStatus,
+        error,
+        setError,
+        additionalContext,
+        setAdditionalContext,
       }}
     >
       {children}

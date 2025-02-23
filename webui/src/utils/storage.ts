@@ -4,6 +4,7 @@
 import { CONFIG_DEFAULT } from '../Config';
 import { Conversation, Message, TimingReport } from './types';
 import Dexie, { Table } from 'dexie';
+import { McpServerConfig } from '../mcp/mcpSSEClient.ts';
 
 const event = new EventTarget();
 
@@ -204,14 +205,14 @@ const StorageUtils = {
     }
   },
   // manage MCP Server Configs
-    // manage MCP Server Configs
+  setServerConfigs(configs: McpServerConfig[]) {
+    localStorage.setItem('mcpServerConfigs', JSON.stringify(configs));
+  },
   getServerConfigs(): McpServerConfig[] {
     const savedVal = JSON.parse(localStorage.getItem('mcpServerConfigs') || '[]');
     return savedVal;
   },
-  setServerConfigs(configs: McpServerConfig[]) {
-    localStorage.setItem('mcpServerConfigs', JSON.stringify(configs));
-  },
+  
 };
 
 

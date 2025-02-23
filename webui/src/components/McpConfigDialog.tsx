@@ -1,9 +1,9 @@
 // McpConfigDialog.tsx
-import React, { useEffect, useState } from 'react';
+import { useEffect,useState } from 'react';
 import { useAppContext } from '../utils/app.context';
 import { McpServerConfig } from '../mcp/mcpSSEClient.ts';
 import { classNames } from '../utils/misc';
-import { OpenInNewTab, XCloseButton } from '../utils/common';
+import { XCloseButton } from '../utils/common';
 import StorageUtils from '../utils/storage';
 
 export default function McpConfigDialog({
@@ -13,7 +13,7 @@ export default function McpConfigDialog({
   show: boolean;
   onClose: () => void;
 }) {
-  const { serverConfigs, setServerConfigs } = useAppContext();
+  const { setServerConfigs }  = useAppContext();
   const [localServerConfigs, setLocalServerConfigs] = useState<McpServerConfig[]>([]);
 
 
@@ -30,11 +30,12 @@ export default function McpConfigDialog({
   };
 
   // Function to handle input changes
-  const handleInputChange = (index: number, field: string, value: string) => {
-    const newConfigs = [...localServerConfigs];
-    newConfigs[index][field] = value;
-    setLocalServerConfigs(newConfigs);
+  const handleInputChange = (index: number, field: keyof McpServerConfig, value: string) => { // Change 'field: string' to 'field: keyof McpServerConfig'
+  const newConfigs = [...localServerConfigs];
+  newConfigs[index][field] = value;
+  setLocalServerConfigs(newConfigs);
   };
+
 
   // Function to handle config save
   const handleSave = () => {
