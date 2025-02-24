@@ -305,7 +305,8 @@ export const AppContextProvider = ({
         }));
         params.stream = false; // turn off streaming for tool use
       }
-
+      console.log("Message to LLM");
+      console.log(params);
       // send request
       const fetchResponse = await fetch(`${BASE_URL}/v1/chat/completions`, {
         method: 'POST',
@@ -354,6 +355,7 @@ export const AppContextProvider = ({
       } else {
         // Handle tool calls
           const body = await fetchResponse.json();
+          console.log(body);
           const finishReason = body.choices[0].finish_reason;
           console.log(finishReason);
           if (finishReason === 'tool_calls') {
@@ -382,8 +384,17 @@ export const AppContextProvider = ({
             console.log(toolResponse);
             toolCallCount++;
           // Here you will iterate through the tool calls for each tool, then set the current message with role of function and send it back to the endpoint.
-        }
+        } 
       }
+          //assume it wasn't a toolcall and post the message. 
+          const newMessageContent = body.choices[0].message.content || '';
+          console.log(newMessageContent)
+          pendingMsg = {
+        ...pendingMsg,
+        content: newMessageContent,
+      };
+      setPending(convId, pendingMsg);
+      
      }
 
     } catch (err) {
