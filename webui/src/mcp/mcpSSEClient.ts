@@ -16,6 +16,8 @@ interface McpClientDict {
     tools: any[];
     prompts: any[];
     resources: any[];
+    connectionStatus: string;
+    error?: string;
   };
 }
 
@@ -50,11 +52,13 @@ export class McpSSEClient {
       );
       transport.onerror = (error) => {
         console.error('SSE transport error:', error);
+        this.setError(config.name, (error as Error).message);
         return { success: false, error: (error as Error).message };
       };
 
       transport.onclose = () => {
         console.log('SSE transport closed');
+        this.setConnectionStatus(config.name, 'Disconnected');
       };
 
       transport.onmessage = (message) => {
@@ -72,6 +76,7 @@ export class McpSSEClient {
           tools: toolsResult?.tools?.map(tool => ({ ...tool, serverName: config.name })) || [],
           prompts: promptsResult?.prompts?.map(prompt => ({ ...prompt, serverName: config.name })) || [],
           resources: resourcesResult?.resources?.map(resource => ({ ...resource, serverName: config.name })) || [],
+          connectionStatus: 'Connected',
         };
 
         // Create a mapping of tool names to their respective server names
@@ -88,8 +93,11 @@ export class McpSSEClient {
         });
 
         console.log(`Initialized client for server ${config.name} successfully.`);
+        this.setConnectionStatus(config.name, 'Connected');
       } catch (error) {
         console.error(`Failed to initialize client for server ${config.name}:`, error);
+        this.setConnectionStatus(config.name, 'Error');
+        this.setError(config.name, (error as Error).message);
         return { success: false, error: (error as Error).message };
       }
     }
@@ -192,5 +200,12 @@ export class McpSSEClient {
     for (const clientInfo of Object.values(this._clients)) {
       await clientInfo.client.close();
     }
+  }
+  private setConnectionStatus(serverName: string, status: string) {
+    this._clients[serverName].connectionStatus = status;
+  }
+
+  private setError(serverName: string, error: string) {
+    this._clients[serverName].error = error;
   }
 }

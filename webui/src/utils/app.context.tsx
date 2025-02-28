@@ -6,6 +6,9 @@ import {
   Message,
   PendingMessage,
   ViewingChat,
+  Tool,
+  Prompt,
+  Resource,
 } from './types';
 import StorageUtils from './storage';
 import {
@@ -15,8 +18,8 @@ import {
 } from './misc';
 import { BASE_URL, CONFIG_DEFAULT, isDev } from '../Config';
 import { matchPath, useLocation, useNavigate } from 'react-router';
-import { McpSSEClient, McpServerConfig } from '../mcp/mcpSSEClient.ts';
- 
+import { McpSSEClient, McpServerConfig  } from '../mcp/mcpSSEClient.ts';
+
 
 
 interface AppContextValue {
@@ -49,6 +52,7 @@ interface AppContextValue {
   saveConfig: (config: typeof CONFIG_DEFAULT) => void;
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
+  
   // MCP Server Configs
   serverConfigs: McpServerConfig[];
   setServerConfigs: (configs: McpServerConfig[]) => void;
@@ -56,7 +60,7 @@ interface AppContextValue {
   // MCP Client
   mcpClient: McpSSEClient | null;
   setMcpClient: (client: McpSSEClient | null) => void;
-
+  
   // Tools, Prompts, Resources
   tools: any[];
   setTools: (tools: any[]) => void;
@@ -64,14 +68,21 @@ interface AppContextValue {
   setPrompts: (prompts: any[]) => void;
   resources: any[];
   setResources: (resources: any[]) => void;
-
+  
+  // MCP Tool Call Approval
+  showToolCallApprovalDialog: boolean;
+  setShowToolCallApprovalDialog: (show: boolean) => void;
+  toolCallApprovalParams: any;
+  setToolCallApprovalParams: (params: any) => void;
+  handleToolCallApproval: (approved: boolean) => void;
+  
   // Connection Status and Error
   connectionStatus: string;
   setConnectionStatus: (status: string) => void;
   error: string | undefined;
   setError: (error: string | undefined) => void;
 
-  // Additional Context
+  // Additional Context - consider migrating to the same code/vars used for the file upload that is in progress
   additionalContext: { uri: string, description?: string }[];
   setAdditionalContext: (context: { uri: string, description?: string }[]) => void;
 }
@@ -118,15 +129,18 @@ export const AppContextProvider = ({
 
   // MCP Server Configs
   const [serverConfigs, setServerConfigs] = useState<McpServerConfig[]>([]);
+  const Mcpconfig = StorageUtils.getMcpConfig();
 
   // MCP Client
   const [mcpClient, setMcpClient] = useState<McpSSEClient | null>(null);
 
   // Tools, Prompts, Resources
-  const [tools, setTools] = useState<any[]>([]);
-  const [prompts, setPrompts] = useState<any[]>([]);
-  const [resources, setResources] = useState<any[]>([]);
-
+  // MCP Tool Call Approval
+  const [showToolCallApprovalDialog, setShowToolCallApprovalDialog] = useState(false);
+  const [toolCallApprovalParams, setToolCallApprovalParams] = useState<any>(null);
+  const [tools, setTools] = useState<Tool[]>([]);
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
   // Connection Status and Error
   const [connectionStatus, setConnectionStatus] = useState<string>('Disconnected');
   const [error, setError] = useState<string | undefined>(undefined);
@@ -173,7 +187,7 @@ export const AppContextProvider = ({
       setAborts((prev) => ({ ...prev, [convId]: controller }));
     }
   };
-
+  
   // Initialize MCP Client if enabled
   useEffect(() => {
       if (config.mcpEnabled) {
@@ -213,7 +227,37 @@ export const AppContextProvider = ({
   // public functions
 
   const isGenerating = (convId: string) => !!pendingMessages[convId];
-  
+
+  const handleToolCallApproval = async (approved: boolean) => {
+    setShowToolCallApprovalDialog(false);
+    let toolResponse = "";
+    if (approved) {
+      if (mcpClient) {
+        toolResponse = await mcpClient.callTool(toolCallApprovalParams);
+      }
+      if (toolResponse !== undefined) {
+        const pendingMsg = {
+          ...pendingMessages[convId ?? ''],
+          content: toolResponse,
+        };
+        setPendingMessages((prev) => ({
+          ...prev,
+          [convId ?? '']: pendingMsg,
+        }));
+      }
+    } else {
+      const pendingMsg = {
+        ...pendingMessages[convId ?? ''],
+        content: 'User declined approval to run tool.',
+      };
+      setPendingMessages((prev) => ({
+        ...prev,
+        [convId ?? '']: pendingMsg,
+      }));
+    }
+  };
+
+
   const generateMessage = async (
     convId: string,
     leafNodeId: Message['id'],
@@ -360,7 +404,6 @@ export const AppContextProvider = ({
           console.log(finishReason);
           if (finishReason === 'tool_calls') {
           console.log("Processing tool call");
-
           const toolCalls = body.choices[0].message.tool_calls;
           
           const calltoolMessageContent = {
@@ -379,9 +422,24 @@ export const AppContextProvider = ({
                 name: toolCall.function.name,
                 arguments: JSON.parse(toolCall.function.arguments || '{}'),
               };
+            
+          if (Mcpconfig.promptForToolUse) {
+            // Show the ToolCallApprovalDialog
+            setShowToolCallApprovalDialog(true);
+            setToolCallApprovalParams(toolParams);
 
+            
+                  
+          } else {
+            // If Prompt for tool use is disabled, run the tool without user interaction
             const toolResponse = await mcpClient?.callTool(toolParams);
-            console.log(toolResponse);
+            pendingMsg = {
+              ...pendingMsg,
+              content: toolResponse || '',
+            };
+            setPending(convId, pendingMsg);
+          }
+            
             toolCallCount++;
           // Here you will iterate through the tool calls for each tool, then set the current message with role of function and send it back to the endpoint.
         } 
@@ -538,6 +596,11 @@ export const AppContextProvider = ({
         setError,
         additionalContext,
         setAdditionalContext,
+        setShowToolCallApprovalDialog,
+        setToolCallApprovalParams,
+        showToolCallApprovalDialog,
+        toolCallApprovalParams,
+        handleToolCallApproval,
       }}
     >
       {children}

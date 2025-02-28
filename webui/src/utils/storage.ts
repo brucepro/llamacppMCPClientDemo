@@ -204,7 +204,16 @@ const StorageUtils = {
       localStorage.setItem('theme', theme);
     }
   },
-  // manage MCP Server Configs
+  // manage MCP Configs
+  setMcpConfig(config: any) {
+    localStorage.setItem('mcpConfig', JSON.stringify(config));
+  },
+
+  getMcpConfig() {
+    const savedVal = JSON.parse(localStorage.getItem('mcpConfig') || '{}');
+    return savedVal;
+  },
+
   setServerConfigs(configs: McpServerConfig[]) {
     localStorage.setItem('mcpServerConfigs', JSON.stringify(configs));
   },

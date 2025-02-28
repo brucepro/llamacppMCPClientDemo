@@ -15,7 +15,10 @@ export default function McpConfigDialog({
 }) {
   const { setServerConfigs }  = useAppContext();
   const [localServerConfigs, setLocalServerConfigs] = useState<McpServerConfig[]>([]);
-
+  const [promptForToolUse, setPromptForToolUse] = useState(
+  StorageUtils.getMcpConfig().promptForToolUse || false
+);
+  
 
   useEffect(() => {
   // Load serverConfigs from local storage on initialization
@@ -39,10 +42,14 @@ export default function McpConfigDialog({
 
   // Function to handle config save
   const handleSave = () => {
-    StorageUtils.setServerConfigs(localServerConfigs);
-    setServerConfigs(localServerConfigs);
-    onClose();
-  };
+  StorageUtils.setMcpConfig({
+    ...localServerConfigs,
+    promptForToolUse,
+  });
+  setServerConfigs(localServerConfigs);
+  onClose();
+};
+
 
   // Function to delete a server config
   const deleteConfig = (index: number) => {
@@ -50,11 +57,22 @@ export default function McpConfigDialog({
     setLocalServerConfigs(newConfigs);
   };
 
+
   return (
     <dialog className={classNames({ modal: true, 'modal-open': show })}>
       <div className="modal-box w-11/12 max-w-3xl">
         <h3 className="text-lg font-bold mb-6">MCP Configurations</h3>
         <div className="flex flex-col h-[calc(90vh-12rem)]">
+          <div className="flex flex-row items-center gap-2 mx-4 mb-2">
+            <input
+              type="checkbox"
+              className="toggle"
+              checked={promptForToolUse}
+              onChange={(e) => setPromptForToolUse(e.target.checked)}
+            />
+            <span>Prompt for Tool Use</span>
+          </div>
+
           {localServerConfigs.map((config, index) => (
             <div key={index} className="flex flex-row items-center gap-2 mx-4 mb-2">
               <input
@@ -76,6 +94,22 @@ export default function McpConfigDialog({
               </button>
             </div>
           ))}
+
+          <div className="border border-base-300 rounded-lg p-4 mb-4">
+            <h4 className="font-bold mb-4">Tools</h4>
+            
+          </div>
+
+          <div className="border border-base-300 rounded-lg p-4 mb-4">
+            <h4 className="font-bold mb-4">Prompts</h4>
+           
+          </div>
+
+          <div className="border border-base-300 rounded-lg p-4 mb-4">
+            <h4 className="font-bold mb-4">Resources</h4>
+          
+          </div>
+
           <button className="btn btn-primary mb-6" onClick={addServerConfig}>
             Add Server
           </button>
@@ -92,4 +126,3 @@ export default function McpConfigDialog({
     </dialog>
   );
 }
-

@@ -39,7 +39,7 @@ export interface Message {
   convId: string;
   type: 'text' | 'root';
   timestamp: number; // timestamp from Date.now()
-  role: 'user' | 'assistant' | 'system' | 'function';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string;
   timings?: TimingReport;
   extra?: MessageExtra[];
@@ -89,3 +89,32 @@ export interface CanvasPyInterpreter {
 }
 
 export type CanvasData = CanvasPyInterpreter;
+
+// MCP Server Configs
+export interface McpServerConfig {
+  name: string;
+  type: string;
+  serverUrl: string;
+}
+
+// Tools, Prompts, Resources
+export interface Tool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, any>;
+  serverName: string;
+}
+
+export interface Prompt {
+  name: string;
+  description: string;
+  inputSchema: Record<string, any>;
+  serverName: string;
+}
+
+export interface Resource {
+  uri: string;
+  name: string;
+  description?: string;
+  serverName: string;
+}

@@ -8,7 +8,9 @@ import StorageUtils from '../utils/storage';
 import { useVSCodeContext } from '../utils/llama-vscode';
 import { BeakerIcon } from '@heroicons/react/24/outline';
 import McpConfigDialog from './McpConfigDialog';
-  
+import  { ToolCallApprovalDialog }  from './ToolCallApprovalDialog';
+
+
 /**
  * A message display is a message node with additional information for rendering.
  * For example, siblings of the message node are stored as their last node (aka leaf node).
@@ -82,6 +84,12 @@ export default function ChatScreen() {
     pendingMessages,
     canvasData,
     replaceMessageAndGenerate,
+    showToolCallApprovalDialog,
+    setShowToolCallApprovalDialog,
+    toolCallApprovalParams,
+    handleToolCallApproval,
+    connectionStatus,
+    tools,
   } = useAppContext();
   const [inputMsg, setInputMsg] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -95,7 +103,10 @@ export default function ChatScreen() {
 
   // keep track of leaf node for rendering
   const [currNodeId, setCurrNodeId] = useState<number>(-1);
-  const [showMcpSettings, setShowMcpSettings] = useState(false);
+  //MCP 
+  const [showMcpSettings, setShowMcpSettings] = useState(false);  
+  
+
 
   const messages: MessageDisplay[] = useMemo(() => {
     if (!viewingChat) return [];
@@ -119,6 +130,7 @@ export default function ChatScreen() {
     }
     scrollToBottom(true);
   };
+  
 
   const sendNewMessage = async () => {
     if (inputMsg.trim().length === 0 || isGenerating(currConvId ?? '')) return;
@@ -190,6 +202,21 @@ export default function ChatScreen() {
         ]
       : [];
 
+  //MCP
+  const getStatusColor = () => {
+      switch (connectionStatus) {
+        case 'Connected':
+          return 'text-success';
+        case 'Disconnected':
+          return 'text-warning';
+        case 'Error':
+          return 'text-error';
+        default:
+          return '';
+      }
+    };
+
+  const serverCount = tools.length > 0 ? 1 : 0; 
   return (
     <div
       className={classNames({
@@ -260,9 +287,12 @@ export default function ChatScreen() {
             )}
           {/* MCP Toolbox */}
           {config.mcpEnabled && (
+            <div className="flex items-center">
             <button className="btn btn-sm bg-base-100 ml-2" onClick={() => setShowMcpSettings(true)}>
               <BeakerIcon className="h-6 w-6" /> MCP Toolbox
-            </button>
+            </button> 
+            <span className={getStatusColor()}> ({serverCount})</span>
+            </div>
           )}
         </div>
       </div>
@@ -276,6 +306,15 @@ export default function ChatScreen() {
         show={showMcpSettings}
         onClose={() => setShowMcpSettings(false)}
       />
+      {/* Render ToolCallApprovalDialog conditionally */}
+      {showToolCallApprovalDialog && (
+        <ToolCallApprovalDialog
+          toolParams={toolCallApprovalParams}
+          onApprove={() => handleToolCallApproval(true)}
+          onDecline={() => handleToolCallApproval(false)}
+          onClose={() => setShowToolCallApprovalDialog(false)}
+        />
+      )}
     </div>
 
 
