@@ -1,4 +1,3 @@
-// McpConfigDialog.tsx
 import { useState } from 'react';
 import { useAppContext } from '../utils/app.context';
 import { McpServerConfig  } from '../mcp/mcpSSEClient.ts';

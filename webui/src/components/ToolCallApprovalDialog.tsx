@@ -1,4 +1,3 @@
-// ToolCallApprovalDialog.tsx
 import React from 'react';
 import { useAppContext } from '../utils/app.context';
 

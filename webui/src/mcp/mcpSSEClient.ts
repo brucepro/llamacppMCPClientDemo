@@ -1,7 +1,10 @@
-// mcpSSEClient.ts
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-
+import {
+  Tool,
+  Prompt,
+  Resource,
+} from '../utils/types';
 
 export interface McpServerConfig {
   name: string;
@@ -12,12 +15,13 @@ export interface McpServerConfig {
   promptForToolUse: boolean;
 }
 
+
 interface McpClientDict {
   [serverName: string]: {
     client: Client;
-    tools: any[];
-    prompts: any[];
-    resources: any[];
+    tools: Tool[];
+    prompts: Prompt[];
+    resources: Resource[];
     connectionStatus: string;
     error?: string;
     maxToolCalls: number;
@@ -27,9 +31,7 @@ interface McpClientDict {
 
 export class McpSSEClient {
   public _clients: McpClientDict = {};
-  private _toolServerMap: { [toolName: string]: string } = {};
-  private _promptServerMap: { [promptName: string]: string } = {};
-  private _resourceServerMap: { [resourceName: string]: string } = {};
+  
 
   constructor(private _serverConfigs: McpServerConfig[]) {}
 
@@ -78,26 +80,24 @@ export class McpSSEClient {
 
         this._clients[config.name] = {
           client,
-          tools: toolsResult?.tools?.map(tool => ({ ...tool, serverName: config.name })) || [],
-          prompts: promptsResult?.prompts?.map(prompt => ({ ...prompt, serverName: config.name })) || [],
-          resources: resourcesResult?.resources?.map(resource => ({ ...resource, serverName: config.name })) || [],
+          tools: toolsResult?.tools?.map(tool => ({ 
+          ...tool, 
+          serverName: config.name, 
+          full_name: `${config.name}.${tool.name}`,
+          description: tool.description ?? '', 
+        })) || [],
+          prompts: promptsResult?.prompts?.map(prompt => ({ 
+          ...prompt, 
+          serverName: config.name, 
+          full_name: `${config.name}.${prompt.name}`,
+          inputSchema: prompt.inputSchema ?? {}, 
+          description: prompt.description ?? '',
+        })) || [],
+          resources: resourcesResult?.resources?.map(resource => ({ ...resource, serverName: config.name, full_name: `${config.name}.${resource.name}` })) || [],
           connectionStatus: 'Connected',
           maxToolCalls: config.maxToolCalls,
           promptForToolUse: config.promptForToolUse,
         };
-
-        // Create a mapping of tool names to their respective server names
-        toolsResult?.tools?.forEach((tool) => {
-          this._toolServerMap[`${config.name}.${tool.name}`] = config.name;
-        });
-        // Create a mapping of prompt names to their respective server names
-        promptsResult?.prompts?.forEach((prompt) => {
-          this._promptServerMap[`${config.name}.${prompt.name}`] = config.name;
-        });
-        // Create a mapping of resource names to their respective server names
-        resourcesResult?.resources?.forEach((resource) => {
-          this._resourceServerMap[`${resource.uri}.${config.name}`] = config.name;
-        });
 
         console.log(`Initialized client for server ${config.name} successfully.`);
       } catch (error) {
@@ -109,33 +109,30 @@ export class McpSSEClient {
     }
     return { success: true };
   }
-
-  getAvailableTools(): Tool[] {
-    const tools = Object.values(this._clients).flatMap(clientInfo => 
-      clientInfo.tools.map(tool => ({ ...tool, full_name: `${clientInfo.client.name}.${tool.name}` }))
+  
+  getAvailableTools = (): Tool[] => {
+    return Object.values(this._clients).flatMap(clientInfo => 
+      clientInfo.tools.map(tool => ({ ...tool, full_name: `${tool.serverName}.${tool.name}` }))
     );
-    return tools;
   }
 
-  getAvailablePrompts(): Prompt[] {
-    const prompts = Object.values(this._clients).flatMap(clientInfo => 
-      clientInfo.prompts.map(prompt => ({ ...prompt, full_name: `${clientInfo.client.name}.${prompt.name}` }))
+  getAvailablePrompts = (): Prompt[] => {
+    return Object.values(this._clients).flatMap(clientInfo => 
+      clientInfo.prompts.map(prompt => ({ ...prompt, full_name: `${prompt.serverName}.${prompt.name}` }))
     );
-    return prompts;
   }
 
-  getAvailableResources(): Resource[] {
-    const resources = Object.values(this._clients).flatMap(clientInfo => 
-      clientInfo.resources.map(resource => ({ ...resource, full_name: `${clientInfo.client.name}.${resource.name}` }))
+  getAvailableResources = (): Resource[] => {
+    return Object.values(this._clients).flatMap(clientInfo => 
+      clientInfo.resources.map(resource => ({ ...resource, full_name: `${resource.serverName}.${resource.name}` }))
     );
-    return resources;
   }
 
-  async callTool(args: any): Promise<any> {
+  async callTool(args: { name: string; arguments: any }): Promise<any> {
     console.log(args);
-    const serverName = this._toolServerMap[args.name];
-    if (!serverName) {
-      console.error(`Tool ${args.name} not found.`);
+    const [serverName, toolName] = args.name.split('.'); // Split servername.toolname
+    if (!serverName || !toolName) {
+      console.error(`Invalid tool name format: ${args.name}`);
       return undefined;
     }
     const clientInfo = this._clients[serverName];
@@ -144,23 +141,23 @@ export class McpSSEClient {
       return undefined;
     }
 
-    const tool = clientInfo.tools.find(tool => tool.name === args.name);
+    const tool = clientInfo.tools.find(tool => tool.name === toolName);
     if (!tool) {
-      console.error(`Tool ${args.name} not found on server ${serverName}.`);
+      console.error(`Tool ${toolName} not found on server ${serverName}.`);
       return undefined;
     }
     try { 
-      return await clientInfo.client.callTool(args);
+      return await clientInfo.client.callTool({ name: toolName, arguments: args.arguments }); // Use toolName here
     } catch (error) {
-      console.error(`Error calling tool ${args.name} on server ${serverName}:`, error);
+      console.error(`Error calling tool ${toolName} on server ${serverName}:`, error);
       return undefined;
     }
   }
 
-   async getPrompt(params: any): Promise<any> {
-    const serverName = this._promptServerMap[params.name];
-    if (!serverName) {
-      console.error(`Prompt ${params.name} not found.`);
+  async getPrompt(params: { name: string }): Promise<any> {
+    const [serverName, promptName] = params.name.split('.'); // Split servername.promptname
+    if (!serverName || !promptName) {
+      console.error(`Invalid prompt name format: ${params.name}`);
       return undefined;
     }
     const clientInfo = this._clients[serverName];
@@ -168,23 +165,23 @@ export class McpSSEClient {
       console.error(`No client found for server ${serverName}.`);
       return undefined;
     }
-    const prompt = clientInfo.prompts.find(prompt => prompt.name === params.name);
+    const prompt = clientInfo.prompts.find(prompt => prompt.name === promptName);
     if (!prompt) {
-      console.error(`Prompt ${params.name} not found on server ${serverName}.`);
+      console.error(`Prompt ${promptName} not found on server ${serverName}.`);
       return undefined;
     }
     try { 
-      return await clientInfo.client.getPrompt(params);
+      return await clientInfo.client.getPrompt({ name: promptName }); // Use promptName here
     } catch (error) {
-      console.error(`Error getting prompt ${params.name} from server ${serverName}:`, error);
+      console.error(`Error getting prompt ${promptName} from server ${serverName}:`, error);
       return undefined;
     }
   }
 
- async readResource(params: any): Promise<any> {
-    const serverName = this._resourceServerMap[params.name];
-    if (!serverName) {
-      console.error(`Resource ${params.name} not found.`);
+  async readResource(params: { name: string; uri: string }): Promise<any> {
+    const [serverName, resourceName] = params.name.split('.'); // Split servername.resourcename
+    if (!serverName || !resourceName) {
+      console.error(`Invalid resource name format: ${params.name}`);
       return undefined;
     }
     const clientInfo = this._clients[serverName];
@@ -192,15 +189,15 @@ export class McpSSEClient {
       console.error(`No client found for server ${serverName}.`);
       return undefined;
     }
-    const resource = clientInfo.resources.find(resource => resource.name === params.name);
+    const resource = clientInfo.resources.find(resource => resource.name === resourceName);
     if (!resource) {
-      console.error(`Resource ${params.name} not found on server ${serverName}.`);
+      console.error(`Resource ${resourceName} not found on server ${serverName}.`);
       return undefined;
     }
     try { 
-      return await clientInfo.client.readResource(params);
+      return await clientInfo.client.readResource({ uri: params.uri }); // Use uri from params here
     } catch (error) {
-      console.error(`Error reading resource ${params.name} from server ${serverName}:`, error);
+      console.error(`Error reading resource ${resourceName} from server ${serverName}:`, error);
       return undefined;
     }
   }
