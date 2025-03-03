@@ -128,8 +128,7 @@ export const AppContextProvider = ({
   const [showSettings, setShowSettings] = useState(false);
 
   // MCP Server Configs
-  const [serverConfigs, setServerConfigs] = useState<McpServerConfig[]>([]);
-  const Mcpconfig = StorageUtils.getMcpConfig();
+  const [serverConfigs, setServerConfigs] = useState<McpServerConfig[]>(StorageUtils.getServerConfigs());
 
   // MCP Client
   const [mcpClient, setMcpClient] = useState<McpSSEClient | null>(null);
@@ -190,26 +189,31 @@ export const AppContextProvider = ({
   
   // Initialize MCP Client if enabled
   useEffect(() => {
-      if (config.mcpEnabled) {
-        const client = new McpSSEClient(serverConfigs);
-        client.initializeClients().then((result) => {
-          if (result.success) {
-            setTools(client.getAvailableTools());
-            setPrompts(client.getAvailablePrompts());
-            setResources(client.getAvailableResources());
-            setMcpClient(client);
-            setConnectionStatus('Connected');
-          } else {
-            setConnectionStatus('Error');
-            setError(result.error);
-          }
-        });
-        return () => {
-          if (mcpClient) {
-            mcpClient.closeAllConnections();
-          }
-        };
-      } else {
+    console.log("MCP Enabled:", config.mcpEnabled);
+    if (config.mcpEnabled) {
+      console.log("Server Configs:", serverConfigs);
+      const client = new McpSSEClient(serverConfigs);
+      client.initializeClients().then((result) => {
+        if (result.success) {
+          setTools(client.getAvailableTools());
+          setPrompts(client.getAvailablePrompts());
+          setResources(client.getAvailableResources());
+          setMcpClient(client);
+          setConnectionStatus('Connected');
+          console.log("Available Tools:", client.getAvailableTools());
+          console.log("Available Prompts:", client.getAvailablePrompts());
+          console.log("Available Resources:", client.getAvailableResources());
+        } else {
+          setConnectionStatus('Error');
+          setError(result.error);
+        }
+      });
+      return () => {
+        if (mcpClient) {
+          mcpClient.closeAllConnections();
+        }
+      };
+    } else {
       // If MCP is not enabled, ensure the client is closed and reset state
       if (mcpClient) {
         mcpClient.closeAllConnections();
@@ -221,7 +225,7 @@ export const AppContextProvider = ({
         setError(undefined);
       }
     }
-    }, [config.mcpEnabled, serverConfigs]);
+  }, [config.mcpEnabled]);
 
   ////////////////////////////////////////////////////////////////////////
   // public functions
@@ -233,29 +237,44 @@ export const AppContextProvider = ({
     let toolResponse = "";
     if (approved) {
       if (mcpClient) {
-        toolResponse = await mcpClient.callTool(toolCallApprovalParams);
-      }
-      if (toolResponse !== undefined) {
-        const pendingMsg = {
-          ...pendingMessages[convId ?? ''],
-          content: toolResponse,
-        };
-        setPendingMessages((prev) => ({
-          ...prev,
-          [convId ?? '']: pendingMsg,
-        }));
+        try {
+          toolResponse = await mcpClient.callTool(toolCallApprovalParams);
+          console.log(toolResponse);
+        } catch (error) {
+          console.error(`Error calling tool: ${error}`);
+          toolResponse = 'Tool failed to execute.';
+        }
       }
     } else {
+      toolResponse = 'User denied tool use';
+    }
+
+    const toolMessageContent = {
+      tool_call_id: toolCallApprovalParams.id || ' ',
+      role: "tool",
+      name: toolCallApprovalParams.name,
+      content: JSON.stringify(toolResponse),
+    };
+
+    if (toolResponse !== undefined) {
       const pendingMsg = {
         ...pendingMessages[convId ?? ''],
-        content: 'User declined approval to run tool.',
+        content: JSON.stringify(toolMessageContent),
       };
+
       setPendingMessages((prev) => ({
         ...prev,
         [convId ?? '']: pendingMsg,
       }));
+
+      // Send the tool response back to the LLM
+      if (convId && viewingChat) {
+        const leafNodeId = viewingChat.messages.at(-1)?.id ?? null;
+        await sendMessage(convId, leafNodeId, JSON.stringify(toolMessageContent), [], () => {});
+      }
     }
   };
+
 
 
   const generateMessage = async (
@@ -342,7 +361,7 @@ export const AppContextProvider = ({
         params.tools = tools.map(tool => ({
           type: 'function',
           function: {
-            name: tool.name,
+            name: tool.full_name,
             description: tool.description,
             parameters: tool.inputSchema,
           },
@@ -419,31 +438,69 @@ export const AppContextProvider = ({
             }
 
             const toolParams = {
+                id: toolCall.function.id || ' ',
                 name: toolCall.function.name,
                 arguments: JSON.parse(toolCall.function.arguments || '{}'),
               };
-            
-          if (Mcpconfig.promptForToolUse) {
+            // Find the server config using the tool's full name
+          const serverName = toolParams.name.split('.')[0];
+          const serverConfig = serverConfigs.find(config => config.name === serverName);
+        
+          if (serverConfig?.promptForToolUse) {
             // Show the ToolCallApprovalDialog
             setShowToolCallApprovalDialog(true);
-            setToolCallApprovalParams(toolParams);
-
-            
-                  
-          } else {
+            setToolCallApprovalParams(toolParams);                           
+         } else {
             // If Prompt for tool use is disabled, run the tool without user interaction
-            const toolResponse = await mcpClient?.callTool(toolParams);
-            pendingMsg = {
-              ...pendingMsg,
-              content: toolResponse || '',
-            };
-            setPending(convId, pendingMsg);
+            try {
+              const toolResponse = await mcpClient?.callTool(toolParams);
+              const toolMessageContent = {
+                tool_call_id: toolCall.function.id || ' ',
+                role: "tool",
+                name: toolCall.function.name,
+                content: toolResponse.content[0].text,
+              };
+
+              if (toolResponse !== undefined) {
+                const pendingMsg = {
+                  ...pendingMessages[convId ?? ''],
+                  content: JSON.stringify(toolMessageContent),
+                };
+
+                setPendingMessages((prev) => ({
+                  ...prev,
+                  [convId ?? '']: pendingMsg,
+                }));
+
+                // Send the tool response back to the LLM
+                if (convId && viewingChat) {
+                  const leafNodeId = viewingChat.messages.at(-1)?.id ?? null;
+                  await sendMessage(convId, leafNodeId, JSON.stringify(toolMessageContent), [], () => {});
+                }
+              }
+              } catch (error) {
+                console.error(`Error calling tool: ${error}`);
+                const pendingMsg = {
+                  ...pendingMessages[convId ?? ''],
+                  content: 'Tool failed to execute.',
+                };
+
+                setPendingMessages((prev) => ({
+                  ...prev,
+                  [convId ?? '']: pendingMsg,
+                }));
+
+                // Send the tool response back to the LLM
+                if (convId && viewingChat) {
+                  const leafNodeId = viewingChat.messages.at(-1)?.id ?? null;
+                  await sendMessage(convId, leafNodeId, 'Tool failed to execute.', [], () => {});
+                }
+              }
+
+              toolCallCount++;
+            }
           }
-            
-            toolCallCount++;
-          // Here you will iterate through the tool calls for each tool, then set the current message with role of function and send it back to the endpoint.
-        } 
-      }
+        } else {
           //assume it wasn't a toolcall and post the message. 
           const newMessageContent = body.choices[0].message.content || '';
           console.log(newMessageContent)
@@ -452,9 +509,13 @@ export const AppContextProvider = ({
         content: newMessageContent,
       };
       setPending(convId, pendingMsg);
-      
-     }
-
+      }
+      if (pendingMsg.content !== null) {
+        await StorageUtils.appendMsg(pendingMsg as Message, leafNodeId);
+      }
+      setPending(convId, null);
+      onChunk(pendingId); // Trigger scroll to bottom and switch to the last node
+    }
     } catch (err) {
       setPending(convId, null);
       if ((err as Error).name === 'AbortError') {
@@ -467,12 +528,6 @@ export const AppContextProvider = ({
         throw err; // rethrow
       }
     }
-
-    if (pendingMsg.content !== null) {
-      await StorageUtils.appendMsg(pendingMsg as Message, leafNodeId);
-    }
-    setPending(convId, null);
-    onChunk(pendingId); // trigger scroll to bottom and switch to the last node
   };
 
   const sendMessage = async (

@@ -204,21 +204,13 @@ const StorageUtils = {
       localStorage.setItem('theme', theme);
     }
   },
+  
   // manage MCP Configs
-  setMcpConfig(config: any) {
-    localStorage.setItem('mcpConfig', JSON.stringify(config));
-  },
-
-  getMcpConfig() {
-    const savedVal = JSON.parse(localStorage.getItem('mcpConfig') || '{}');
-    return savedVal;
-  },
-
   setServerConfigs(configs: McpServerConfig[]) {
-    localStorage.setItem('mcpServerConfigs', JSON.stringify(configs));
+    localStorage.setItem('mcpConfig', JSON.stringify(configs));
   },
   getServerConfigs(): McpServerConfig[] {
-    const savedVal = JSON.parse(localStorage.getItem('mcpServerConfigs') || '[]');
+    const savedVal = JSON.parse(localStorage.getItem('mcpConfig') || '[]');
     return savedVal;
   },
   

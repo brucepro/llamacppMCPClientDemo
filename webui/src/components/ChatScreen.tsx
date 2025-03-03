@@ -7,7 +7,7 @@ import CanvasPyInterpreter from './CanvasPyInterpreter';
 import StorageUtils from '../utils/storage';
 import { useVSCodeContext } from '../utils/llama-vscode';
 import { BeakerIcon } from '@heroicons/react/24/outline';
-import McpConfigDialog from './McpConfigDialog';
+import { McpConfigDialog } from './McpConfigDialog';
 import  { ToolCallApprovalDialog }  from './ToolCallApprovalDialog';
 
 
@@ -89,7 +89,7 @@ export default function ChatScreen() {
     toolCallApprovalParams,
     handleToolCallApproval,
     connectionStatus,
-    tools,
+    mcpClient,
   } = useAppContext();
   const [inputMsg, setInputMsg] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -202,21 +202,28 @@ export default function ChatScreen() {
         ]
       : [];
 
-  //MCP
+  // MCP
   const getStatusColor = () => {
-      switch (connectionStatus) {
-        case 'Connected':
-          return 'text-success';
-        case 'Disconnected':
-          return 'text-warning';
-        case 'Error':
-          return 'text-error';
-        default:
-          return '';
-      }
-    };
+    switch (connectionStatus) {
+      case 'Connected':
+        return 'text-success';
+      case 'Disconnected':
+        return 'text-warning';
+      case 'Error':
+        return 'text-error';
+      default:
+        return '';
+    }
+  };
 
-  const serverCount = tools.length > 0 ? 1 : 0; 
+  const serverCount = useMemo(() => {
+  if (!mcpClient) return 0;
+  const clients = Object.values(mcpClient._clients).filter(clientInfo => clientInfo.connectionStatus === 'Connected');
+  return clients.length;
+}, [mcpClient]);
+
+
+  
   return (
     <div
       className={classNames({

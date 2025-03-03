@@ -103,6 +103,7 @@ export interface Tool {
   description: string;
   inputSchema: Record<string, any>;
   serverName: string;
+  full_name: string; // serverName.toolName to account for multiple MCP servers with same toolname.
 }
 
 export interface Prompt {
@@ -110,6 +111,7 @@ export interface Prompt {
   description: string;
   inputSchema: Record<string, any>;
   serverName: string;
+  full_name: string; // serverName.promptName
 }
 
 export interface Resource {
@@ -117,4 +119,5 @@ export interface Resource {
   name: string;
   description?: string;
   serverName: string;
+  full_name: string; // serverName.resourceName
 }

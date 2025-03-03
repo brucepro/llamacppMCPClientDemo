@@ -7,8 +7,10 @@ export interface McpServerConfig {
   name: string;
   type: string;
   serverUrl: string;
+  connectionStatus: string;
+  maxToolCalls: number;
+  promptForToolUse: boolean;
 }
-
 
 interface McpClientDict {
   [serverName: string]: {
@@ -18,12 +20,13 @@ interface McpClientDict {
     resources: any[];
     connectionStatus: string;
     error?: string;
+    maxToolCalls: number;
+    promptForToolUse: boolean;
   };
 }
 
-
 export class McpSSEClient {
-  private _clients: McpClientDict = {};
+  public _clients: McpClientDict = {};
   private _toolServerMap: { [toolName: string]: string } = {};
   private _promptServerMap: { [promptName: string]: string } = {};
   private _resourceServerMap: { [resourceName: string]: string } = {};
@@ -32,6 +35,7 @@ export class McpSSEClient {
 
   async initializeClients(): Promise<{ success: boolean, error?: string }> {
     for (const config of this._serverConfigs) {
+      console.log("Server Config:", config);
       if (config.type !== "sse") {
         console.warn(`Unsupported transport type: ${config.type}. Skipping server ${config.name}.`);
         continue;
@@ -53,7 +57,7 @@ export class McpSSEClient {
       transport.onerror = (error) => {
         console.error('SSE transport error:', error);
         this.setError(config.name, (error as Error).message);
-        return { success: false, error: (error as Error).message };
+        this.setConnectionStatus(config.name, 'Error');
       };
 
       transport.onclose = () => {
@@ -67,6 +71,7 @@ export class McpSSEClient {
 
       try {
         await client.connect(transport);
+        console.log(`Client connected to server ${config.name}`);
         const toolsResult = await client.listTools();
         const promptsResult = await client.listPrompts();
         const resourcesResult = await client.listResources();
@@ -77,23 +82,24 @@ export class McpSSEClient {
           prompts: promptsResult?.prompts?.map(prompt => ({ ...prompt, serverName: config.name })) || [],
           resources: resourcesResult?.resources?.map(resource => ({ ...resource, serverName: config.name })) || [],
           connectionStatus: 'Connected',
+          maxToolCalls: config.maxToolCalls,
+          promptForToolUse: config.promptForToolUse,
         };
 
         // Create a mapping of tool names to their respective server names
         toolsResult?.tools?.forEach((tool) => {
-          this._toolServerMap[tool.name] = config.name;
+          this._toolServerMap[`${config.name}.${tool.name}`] = config.name;
         });
         // Create a mapping of prompt names to their respective server names
         promptsResult?.prompts?.forEach((prompt) => {
-          this._promptServerMap[prompt.name] = config.name;
+          this._promptServerMap[`${config.name}.${prompt.name}`] = config.name;
         });
         // Create a mapping of resource names to their respective server names
         resourcesResult?.resources?.forEach((resource) => {
-          this._resourceServerMap[resource.uri] = config.name;
+          this._resourceServerMap[`${resource.uri}.${config.name}`] = config.name;
         });
 
         console.log(`Initialized client for server ${config.name} successfully.`);
-        this.setConnectionStatus(config.name, 'Connected');
       } catch (error) {
         console.error(`Failed to initialize client for server ${config.name}:`, error);
         this.setConnectionStatus(config.name, 'Error');
@@ -104,21 +110,24 @@ export class McpSSEClient {
     return { success: true };
   }
 
-  getAvailableTools(): any[] {
-    const tools = Object.values(this._clients).flatMap(clientInfo => clientInfo.tools);
-    console.log(tools);
+  getAvailableTools(): Tool[] {
+    const tools = Object.values(this._clients).flatMap(clientInfo => 
+      clientInfo.tools.map(tool => ({ ...tool, full_name: `${clientInfo.client.name}.${tool.name}` }))
+    );
     return tools;
   }
 
-  getAvailablePrompts(): any[] {
-    const prompts = Object.values(this._clients).flatMap(clientInfo => clientInfo.prompts);
-    console.log(prompts);
+  getAvailablePrompts(): Prompt[] {
+    const prompts = Object.values(this._clients).flatMap(clientInfo => 
+      clientInfo.prompts.map(prompt => ({ ...prompt, full_name: `${clientInfo.client.name}.${prompt.name}` }))
+    );
     return prompts;
   }
 
-  getAvailableResources(): any[] {
-    const resources = Object.values(this._clients).flatMap(clientInfo => clientInfo.resources);
-    console.log(resources);
+  getAvailableResources(): Resource[] {
+    const resources = Object.values(this._clients).flatMap(clientInfo => 
+      clientInfo.resources.map(resource => ({ ...resource, full_name: `${clientInfo.client.name}.${resource.name}` }))
+    );
     return resources;
   }
 
@@ -201,6 +210,7 @@ export class McpSSEClient {
       await clientInfo.client.close();
     }
   }
+  
   private setConnectionStatus(serverName: string, status: string) {
     this._clients[serverName].connectionStatus = status;
   }
