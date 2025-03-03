@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAppContext } from '../utils/app.context';
 import { McpServerConfig  } from '../mcp/mcpSSEClient.ts';
+import StorageUtils from '../utils/storage';
 
 interface McpConfigDialogProps {
   show: boolean;
@@ -28,6 +29,7 @@ export const McpConfigDialog: React.FC<McpConfigDialogProps> = ({
   };
 
   const handleSave = () => {
+    StorageUtils.setServerConfigs(localServerConfigs);
     setServerConfigs(localServerConfigs);
     onClose();
   };
