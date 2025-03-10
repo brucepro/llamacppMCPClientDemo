@@ -35,7 +35,9 @@ export class McpSSEClient {
 
   constructor(private _serverConfigs: McpServerConfig[]) {}
 
-  async initializeClients(): Promise<{ success: boolean, error?: string }> {
+  public async initializeClients(): Promise<{ success: boolean, error?: string }> {
+    await this.closeAllConnections();
+    this._clients = {}; 
     for (const config of this._serverConfigs) {
       console.log("Server Config:", config);
       if (config.type !== "sse") {
@@ -202,10 +204,11 @@ export class McpSSEClient {
     }
   }
 
-  async closeAllConnections(): Promise<void> {
+  public async closeAllConnections(): Promise<void> {
     for (const clientInfo of Object.values(this._clients)) {
       await clientInfo.client.close();
     }
+    this._clients = {}; 
   }
   
   private setConnectionStatus(serverName: string, status: string) {

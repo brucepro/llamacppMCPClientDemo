@@ -189,43 +189,48 @@ export const AppContextProvider = ({
   
   // Initialize MCP Client if enabled
   useEffect(() => {
-    console.log("MCP Enabled:", config.mcpEnabled);
     if (config.mcpEnabled) {
-      console.log("Server Configs:", serverConfigs);
-      const client = new McpSSEClient(serverConfigs);
-      client.initializeClients().then((result) => {
-        if (result.success) {
-          setTools(client.getAvailableTools());
-          setPrompts(client.getAvailablePrompts());
-          setResources(client.getAvailableResources());
-          setMcpClient(client);
-          setConnectionStatus('Connected');
-          console.log("Available Tools:", client.getAvailableTools());
-          console.log("Available Prompts:", client.getAvailablePrompts());
-          console.log("Available Resources:", client.getAvailableResources());
-        } else {
-          setConnectionStatus('Error');
-          setError(result.error);
-        }
-      });
-      return () => {
+      const newClient = new McpSSEClient(serverConfigs);
+      // Close existing client before creating new
+      const cleanup = async () => {
         if (mcpClient) {
-          mcpClient.closeAllConnections();
+          await mcpClient.closeAllConnections();
         }
       };
+      cleanup().then(() => {
+        newClient.initializeClients().then((result) => {
+          if (result.success) {
+            setMcpClient(newClient);
+            setTools(newClient.getAvailableTools());
+            setPrompts(newClient.getAvailablePrompts());
+            setResources(newClient.getAvailableResources());
+            setConnectionStatus('Connected');
+          } else {
+            setConnectionStatus('Error');
+            setError(result.error);
+          }
+        });
+      });
     } else {
-      // If MCP is not enabled, ensure the client is closed and reset state
+      // Close existing client if any
       if (mcpClient) {
-        mcpClient.closeAllConnections();
-        setMcpClient(null);
-        setTools([]);
-        setPrompts([]);
-        setResources([]);
-        setConnectionStatus('Disconnected');
-        setError(undefined);
+        mcpClient.closeAllConnections().then(() => {
+          setMcpClient(null);
+          setTools([]);
+          setPrompts([]);
+          setResources([]);
+          setConnectionStatus('Disconnected');
+          setError(undefined);
+        });
       }
     }
-  }, [config.mcpEnabled]);
+    // Cleanup on unmount
+    return () => {
+      if (mcpClient) {
+        mcpClient.closeAllConnections();
+      }
+    };
+  }, [config.mcpEnabled, serverConfigs]);
 
   ////////////////////////////////////////////////////////////////////////
   // public functions
