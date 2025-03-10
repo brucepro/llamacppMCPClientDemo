@@ -4,6 +4,10 @@ Still in progress but seems to work.
 # Instructions
 
 Load the SSE servers: 
+npx -y supergateway --cors --port 8002 --stdio "npx -y @modelcontextprotocol/server-everything"
+
+or 
+
 cd servers/python/simple-tool-prompt-resource
 Load it with uv. 
 ```bash
